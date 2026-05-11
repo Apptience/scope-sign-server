@@ -4,43 +4,7 @@
   "packages": {
     "node": "20"
   },
-  "caches": {
-    "npm": {
-      "directory": "/root/.npm",
-      "type": "shared"
-    }
-  },
-  "steps": {
-    "install": {
-      "commands": [
-        "npm ci --prefer-offline"
-      ],
-      "caches": ["npm"]
-    },
-    "build": {
-      "inputs": [
-        { "step": "install" }
-      ],
-      "commands": [
-        "npm run build"
-      ]
-    }
-  },
   "deploy": {
-    "inputs": [
-      {
-        "step": "install",
-        "include": ["node_modules"]
-      },
-      {
-        "step": "build",
-        "include": ["dist"]
-      },
-      {
-        "local": true,
-        "include": ["package.json"]
-      }
-    ],
     "startCommand": "node dist/server.js"
   }
 }
