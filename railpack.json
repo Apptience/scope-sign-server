@@ -1,0 +1,72 @@
+{
+    "$schema": "https://schema.railpack.com",
+    "provider": "node",
+    "packages": {
+        "node": "20"
+    },
+    "caches": {
+        "npm": {
+            "directory": "/root/.npm",
+            "type": "shared"
+        }
+    },
+    "steps": {
+        "install": {
+            "inputs": [
+                {
+                    "local": true,
+                    "include": [
+                        "package.json",
+                        "package-lock.json"
+                    ]
+                }
+            ],
+            "commands": [
+                "npm ci --prefer-offline"
+            ],
+            "caches": [
+                "npm"
+            ]
+        },
+        "build": {
+            "inputs": [
+                {
+                    "step": "install"
+                },
+                {
+                    "local": true,
+                    "include": [
+                        "src",
+                        "tsconfig.json"
+                    ]
+                }
+            ],
+            "commands": [
+                "npm run build"
+            ]
+        }
+    },
+    "deploy": {
+        "inputs": [
+            {
+                "step": "install",
+                "include": [
+                    "node_modules"
+                ]
+            },
+            {
+                "step": "build",
+                "include": [
+                    "dist"
+                ]
+            },
+            {
+                "local": true,
+                "include": [
+                    "package.json"
+                ]
+            }
+        ],
+        "startCommand": "node dist/index.js"
+    }
+}

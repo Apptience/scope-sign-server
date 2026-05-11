@@ -1,32 +1,32 @@
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { boolean, integer, pgTable, real, text } from "drizzle-orm/pg-core";
 import { sql, relations } from "drizzle-orm";
 
 // ─── Agency ──────────────────────────────────────────────────────────────────
-export const agency = sqliteTable("Agency", {
+export const agency = pgTable("Agency", {
   id:        text("id").primaryKey(),
   name:      text("name").notNull(),
   logoUrl:   text("logoUrl"),
   country:   text("country"),
   currency:  text("currency").notNull().default("USD"),
-  createdAt: text("createdAt").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updatedAt").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
+  updatedAt: text("updatedAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── TeamMember ───────────────────────────────────────────────────────────────
-export const teamMember = sqliteTable("TeamMember", {
+export const teamMember = pgTable("TeamMember", {
   id:           text("id").primaryKey(),
   email:        text("email").notNull().unique(),
   name:         text("name").notNull(),
   passwordHash: text("passwordHash").notNull(),
   role:         text("role").notNull().default("MEMBER"),
   agencyId:     text("agencyId").notNull().references(() => agency.id, { onDelete: "cascade" }),
-  isVerified:   integer("isVerified", { mode: "boolean" }).notNull().default(false),
-  createdAt:    text("createdAt").notNull().default(sql`(datetime('now'))`),
-  updatedAt:    text("updatedAt").notNull().default(sql`(datetime('now'))`),
+  isVerified:   boolean("isVerified").notNull().default(false),
+  createdAt:    text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
+  updatedAt:    text("updatedAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Project ──────────────────────────────────────────────────────────────────
-export const project = sqliteTable("Project", {
+export const project = pgTable("Project", {
   id:             text("id").primaryKey(),
   name:           text("name").notNull(),
   clientName:     text("clientName").notNull(),
@@ -41,22 +41,22 @@ export const project = sqliteTable("Project", {
   signOffRecord:  text("signOffRecord"),
   signedAt:       text("signedAt"),
   agencyId:       text("agencyId").notNull(),
-  createdAt:      text("createdAt").notNull().default(sql`(datetime('now'))`),
-  updatedAt:      text("updatedAt").notNull().default(sql`(datetime('now'))`),
+  createdAt:      text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
+  updatedAt:      text("updatedAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Section ──────────────────────────────────────────────────────────────────
-export const section = sqliteTable("Section", {
+export const section = pgTable("Section", {
   id:        text("id").primaryKey(),
   projectId: text("projectId").notNull().references(() => project.id, { onDelete: "cascade" }),
   title:     text("title").notNull(),
   order:     integer("order").notNull().default(0),
-  createdAt: text("createdAt").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updatedAt").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
+  updatedAt: text("updatedAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── ScopeCard ────────────────────────────────────────────────────────────────
-export const scopeCard = sqliteTable("ScopeCard", {
+export const scopeCard = pgTable("ScopeCard", {
   id:          text("id").primaryKey(),
   projectId:   text("projectId").notNull().references(() => project.id, { onDelete: "cascade" }),
   sectionId:   text("sectionId").references(() => section.id, { onDelete: "set null" }),
@@ -69,51 +69,51 @@ export const scopeCard = sqliteTable("ScopeCard", {
   type:        text("type").notNull().default("IN_SCOPE"),
   status:      text("status").notNull().default("PENDING"),
   order:       integer("order").notNull().default(0),
-  createdAt:   text("createdAt").notNull().default(sql`(datetime('now'))`),
-  updatedAt:   text("updatedAt").notNull().default(sql`(datetime('now'))`),
+  createdAt:   text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
+  updatedAt:   text("updatedAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── CardMessage ──────────────────────────────────────────────────────────────
-export const cardMessage = sqliteTable("CardMessage", {
+export const cardMessage = pgTable("CardMessage", {
   id:        text("id").primaryKey(),
   cardId:    text("cardId").notNull().references(() => scopeCard.id, { onDelete: "cascade" }),
   sender:    text("sender").notNull(), // "CLIENT" | "AGENCY"
   message:   text("message").notNull(),
-  createdAt: text("createdAt").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── MagicLink ────────────────────────────────────────────────────────────────
-export const magicLink = sqliteTable("MagicLink", {
+export const magicLink = pgTable("MagicLink", {
   id:        text("id").primaryKey(),
   projectId: text("projectId").notNull().references(() => project.id, { onDelete: "cascade" }),
   token:     text("token").notNull().unique(),
   expiresAt: text("expiresAt").notNull(),
-  isActive:  integer("isActive", { mode: "boolean" }).notNull().default(true),
-  createdAt: text("createdAt").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updatedAt").notNull().default(sql`(datetime('now'))`),
+  isActive:  boolean("isActive").notNull().default(true),
+  createdAt: text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
+  updatedAt: text("updatedAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── ActivityLog ──────────────────────────────────────────────────────────────
-export const activityLog = sqliteTable("ActivityLog", {
+export const activityLog = pgTable("ActivityLog", {
   id:        text("id").primaryKey(),
   projectId: text("projectId").notNull().references(() => project.id, { onDelete: "cascade" }),
   action:    text("action").notNull(),
   details:   text("details").notNull(),
-  createdAt: text("createdAt").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Notification ─────────────────────────────────────────────────────────────
-export const notification = sqliteTable("Notification", {
+export const notification = pgTable("Notification", {
   id:        text("id").primaryKey(),
   agencyId:  text("agencyId").notNull().references(() => agency.id, { onDelete: "cascade" }),
   projectId: text("projectId").notNull().references(() => project.id, { onDelete: "cascade" }),
   content:   text("content").notNull(),
-  isRead:    integer("isRead", { mode: "boolean" }).notNull().default(false),
-  createdAt: text("createdAt").notNull().default(sql`(datetime('now'))`),
+  isRead:    boolean("isRead").notNull().default(false),
+  createdAt: text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── ChangeRequest ────────────────────────────────────────────────────────────
-export const changeRequest = sqliteTable("ChangeRequest", {
+export const changeRequest = pgTable("ChangeRequest", {
   id:                  text("id").primaryKey(),
   projectId:           text("projectId").notNull().references(() => project.id, { onDelete: "cascade" }),
   scopeCardId:         text("scopeCardId").references(() => scopeCard.id, { onDelete: "set null" }),
@@ -125,8 +125,8 @@ export const changeRequest = sqliteTable("ChangeRequest", {
   timelineImpactDays:  integer("timelineImpactDays").default(0),
   internalNotes:       text("internalNotes"),
   clientFeedback:      text("clientFeedback"),
-  createdAt:           text("createdAt").notNull().default(sql`(datetime('now'))`),
-  updatedAt:           text("updatedAt").notNull().default(sql`(datetime('now'))`),
+  createdAt:           text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
+  updatedAt:           text("updatedAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 // ─── Relations ────────────────────────────────────────────────────────────────
@@ -233,13 +233,12 @@ export type ChangeRequest  = typeof changeRequest.$inferSelect;
 export type CardMessage    = typeof cardMessage.$inferSelect;
 
 // ─── EmailVerification ────────────────────────────────────────────────────────
-export const emailVerification = sqliteTable("EmailVerification", {
+export const emailVerification = pgTable("EmailVerification", {
   id:        text("id").primaryKey(),
   email:     text("email").notNull(),
   code:      text("code").notNull(),
   expiresAt: text("expiresAt").notNull(),
-  createdAt: text("createdAt").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("createdAt").notNull().default(sql`CURRENT_TIMESTAMP::text`),
 });
 
 export type EmailVerification = typeof emailVerification.$inferSelect;
-
