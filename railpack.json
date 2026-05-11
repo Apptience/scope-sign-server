@@ -1,11 +1,13 @@
 {
   "steps": {
     "install": {
+      "inputs": ["..."],
       "commands": [
         "npm install"
       ]
     },
     "build": {
+      "inputs": ["...", { "step": "install" }],
       "commands": [
         "npm run build"
       ]
