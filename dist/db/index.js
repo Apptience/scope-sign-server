@@ -36,16 +36,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.db = void 0;
+exports.db = exports.client = void 0;
 require("dotenv/config");
-const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
-const better_sqlite3_2 = require("drizzle-orm/better-sqlite3");
+const postgres_1 = __importDefault(require("postgres"));
+const postgres_js_1 = require("drizzle-orm/postgres-js");
 const schema = __importStar(require("./schema"));
-const path_1 = __importDefault(require("path"));
-const dbPath = process.env.DATABASE_URL?.replace("file:", "") ?? "./dev.db";
-const absolutePath = path_1.default.resolve(dbPath);
-const sqlite = new better_sqlite3_1.default(absolutePath);
-// Enable WAL mode for better concurrent read performance
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
-exports.db = (0, better_sqlite3_2.drizzle)(sqlite, { schema });
+const connectionString = process.env.DATABASE_URL;
+exports.client = (0, postgres_1.default)(connectionString);
+exports.db = (0, postgres_js_1.drizzle)(exports.client, { schema });
