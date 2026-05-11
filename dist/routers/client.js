@@ -12,17 +12,27 @@ exports.clientRouter = (0, trpc_1.router)({
         const proj = await ctx.db.query.project.findFirst({
             where: (p, { eq }) => eq(p.id, ctx.project.id),
             with: {
+                agency: true,
                 sections: {
                     orderBy: (s, { asc }) => [asc(s.order)],
                     with: {
                         scopeCards: {
                             orderBy: (c, { asc }) => [asc(c.order)],
+                            with: {
+                                messages: { orderBy: (m, { asc }) => [asc(m.createdAt)] },
+                            },
                         },
                     },
                 },
                 scopeCards: {
                     where: (c, { isNull }) => isNull(c.sectionId),
                     orderBy: (c, { asc }) => [asc(c.order)],
+                    with: {
+                        messages: { orderBy: (m, { asc }) => [asc(m.createdAt)] },
+                    },
+                },
+                changeRequests: {
+                    orderBy: (c, { desc }) => [desc(c.createdAt)]
                 },
             },
         });
@@ -89,9 +99,17 @@ exports.clientRouter = (0, trpc_1.router)({
             .update(schema_1.scopeCard)
             .set({ status: "QUESTION_ASKED", updatedAt: now })
             .where((0, drizzle_orm_1.eq)(schema_1.scopeCard.id, input.cardId));
+        await ctx.db.insert(schema_1.cardMessage).values({
+            id: (0, crypto_1.randomUUID)(),
+            cardId: input.cardId,
+            sender: "CLIENT",
+            message: input.question,
+            createdAt: now,
+        });
         // Create in-app notification
         await ctx.db.insert(schema_1.notification).values({
             id: (0, crypto_1.randomUUID)(),
+            agencyId: ctx.project.agencyId,
             projectId: ctx.project.id,
             content: `${ctx.project.clientName} asked a question on feature "${card.title}": "${input.question.substring(0, 60)}..."`,
             isRead: false,
@@ -223,6 +241,7 @@ exports.clientRouter = (0, trpc_1.router)({
         // Create notification
         await ctx.db.insert(schema_1.notification).values({
             id: (0, crypto_1.randomUUID)(),
+            agencyId: ctx.project.agencyId,
             projectId: ctx.project.id,
             content: `🎉 Project "${ctx.project.name}" has been formally signed off by ${input.typedName}!`,
             isRead: false,
@@ -243,5 +262,99 @@ exports.clientRouter = (0, trpc_1.router)({
             where: (p, { eq }) => eq(p.id, ctx.project.id),
         });
         return updated;
+    }),
+    submitChangeRequest: trpc_1.magicLinkProcedure
+        .input(zod_1.z.object({
+        clientRequest: zod_1.z.string().min(1).max(3000),
+        scopeCardId: zod_1.z.string().optional(),
+    }))
+        .mutation(async ({ input, ctx }) => {
+        const now = new Date().toISOString();
+        const requestId = (0, crypto_1.randomUUID)();
+        await ctx.db.insert(schema_1.changeRequest).values({
+            id: requestId,
+            projectId: ctx.project.id,
+            scopeCardId: input.scopeCardId || null,
+            status: "NEW",
+            clientRequest: input.clientRequest,
+            createdAt: now,
+            updatedAt: now,
+        });
+        // Update the underlying Scope Card context status immediately
+        if (input.scopeCardId) {
+            await ctx.db.update(schema_1.scopeCard)
+                .set({ status: "CHANGE_REQUESTED", updatedAt: now })
+                .where((0, drizzle_orm_1.eq)(schema_1.scopeCard.id, input.scopeCardId));
+        }
+        // Notify agency
+        await ctx.db.insert(schema_1.notification).values({
+            id: (0, crypto_1.randomUUID)(),
+            agencyId: ctx.project.agencyId,
+            projectId: ctx.project.id,
+            content: `${ctx.project.clientName} submitted a change request for "${ctx.project.name}".`,
+            isRead: false,
+            createdAt: now,
+        });
+        await ctx.db.insert(schema_1.activityLog).values({
+            id: (0, crypto_1.randomUUID)(),
+            projectId: ctx.project.id,
+            action: "CHANGE_REQUEST_SUBMITTED",
+            details: JSON.stringify({
+                clientName: ctx.project.clientName,
+            }),
+            createdAt: now,
+        });
+        return { success: true, requestId };
+    }),
+    decideChangeRequest: trpc_1.magicLinkProcedure
+        .input(zod_1.z.object({
+        requestId: zod_1.z.string(),
+        decision: zod_1.z.enum(["APPROVED", "DECLINED"]),
+        feedback: zod_1.z.string().optional(),
+    }))
+        .mutation(async ({ input, ctx }) => {
+        const request = await ctx.db.query.changeRequest.findFirst({
+            where: (cr, { and, eq }) => and(eq(cr.id, input.requestId), eq(cr.projectId, ctx.project.id)),
+        });
+        if (!request || request.status !== "PRICED") {
+            throw new server_1.TRPCError({
+                code: "BAD_REQUEST",
+                message: "Change request not found or not ready for decision.",
+            });
+        }
+        const now = new Date().toISOString();
+        const newStatus = input.decision; // Direct alignment with canonical flow ("APPROVED" | "DECLINED")
+        await ctx.db
+            .update(schema_1.changeRequest)
+            .set({
+            status: newStatus,
+            clientFeedback: input.feedback || null,
+            updatedAt: now,
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.changeRequest.id, input.requestId));
+        // Restore parent card state out of CHANGE_REQUESTED (typically baseline approved)
+        if (request.scopeCardId) {
+            await ctx.db.update(schema_1.scopeCard)
+                .set({ status: "APPROVED", updatedAt: now })
+                .where((0, drizzle_orm_1.eq)(schema_1.scopeCard.id, request.scopeCardId));
+        }
+        await ctx.db.insert(schema_1.notification).values({
+            id: (0, crypto_1.randomUUID)(),
+            agencyId: ctx.project.agencyId,
+            projectId: ctx.project.id,
+            content: `${ctx.project.clientName} ${input.decision.toLowerCase()} change request pricing.`,
+            isRead: false,
+            createdAt: now,
+        });
+        await ctx.db.insert(schema_1.activityLog).values({
+            id: (0, crypto_1.randomUUID)(),
+            projectId: ctx.project.id,
+            action: `CHANGE_REQUEST_${input.decision}`,
+            details: JSON.stringify({
+                clientName: ctx.project.clientName,
+            }),
+            createdAt: now,
+        });
+        return { success: true };
     }),
 });

@@ -100,7 +100,7 @@ exports.scopeCardRouter = (0, trpc_1.router)({
         included: zod_1.z.array(zod_1.z.string()).optional(),
         excluded: zod_1.z.array(zod_1.z.string()).optional(),
         type: zod_1.z.enum(["IN_SCOPE", "OUT_OF_SCOPE"]).optional(),
-        status: zod_1.z.enum(["PENDING", "APPROVED", "QUESTION_ASKED"]).optional(),
+        status: zod_1.z.enum(["PENDING", "APPROVED", "QUESTION_ASKED", "ANSWERED", "CHANGE_REQUESTED"]).optional(),
         order: zod_1.z.number().optional(),
     }))
         .mutation(async ({ input, ctx }) => {
@@ -155,6 +155,33 @@ exports.scopeCardRouter = (0, trpc_1.router)({
                 .set({ order: sec.order, updatedAt: now })
                 .where((0, drizzle_orm_1.eq)(schema_1.section.id, sec.id));
         }
+        return { success: true };
+    }),
+    answerQuestion: trpc_1.protectedProcedure
+        .input(zod_1.z.object({ id: zod_1.z.string(), reply: zod_1.z.string().min(1) }))
+        .mutation(async ({ input, ctx }) => {
+        const card = await ctx.db.query.scopeCard.findFirst({
+            where: (c, { eq }) => eq(c.id, input.id),
+            with: { project: true },
+        });
+        if (!card || card.project.agencyId !== ctx.user.agencyId) {
+            throw new server_1.TRPCError({ code: "NOT_FOUND", message: "Scope card not found." });
+        }
+        const now = new Date().toISOString();
+        await ctx.db
+            .update(schema_1.scopeCard)
+            .set({
+            status: "ANSWERED",
+            updatedAt: now,
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.scopeCard.id, input.id));
+        await ctx.db.insert(schema_1.cardMessage).values({
+            id: (0, crypto_1.randomUUID)(),
+            cardId: input.id,
+            sender: "AGENCY",
+            message: input.reply,
+            createdAt: now,
+        });
         return { success: true };
     }),
 });

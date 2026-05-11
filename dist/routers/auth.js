@@ -12,7 +12,7 @@ const zod_1 = require("zod");
 const drizzle_orm_1 = require("drizzle-orm");
 const schema_1 = require("../db/schema");
 const trpc_1 = require("../trpc");
-const email_service_1 = require("../email.service");
+const email_service_1 = require("../services/email.service");
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-jwt-key-change-in-production";
 exports.authRouter = (0, trpc_1.router)({
     signup: trpc_1.publicProcedure
@@ -204,6 +204,75 @@ exports.authRouter = (0, trpc_1.router)({
             name: member.name,
             code,
         });
+        return { success: true };
+    }),
+    forgotPassword: trpc_1.publicProcedure
+        .input(zod_1.z.object({ email: zod_1.z.string().email() }))
+        .mutation(async ({ input, ctx }) => {
+        const email = input.email.toLowerCase().trim();
+        console.log(`[FORGOT_PWD] Requested for email="${email}"`);
+        const member = await ctx.db.query.teamMember.findFirst({
+            where: (m, { eq }) => eq(m.email, email),
+        });
+        if (!member) {
+            console.log(`[FORGOT_PWD] User not found for email="${email}". Returning success to prevent email enumeration.`);
+            return { success: true };
+        }
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationId = (0, crypto_1.randomUUID)();
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        console.log(`[FORGOT_PWD] Generated code="${code}" for email="${email}"`);
+        await ctx.db.insert(schema_1.emailVerification).values({
+            id: verificationId,
+            email: email,
+            code,
+            expiresAt,
+        });
+        await (0, email_service_1.sendPasswordResetEmail)({
+            to: email,
+            name: member.name,
+            code,
+        });
+        return { success: true };
+    }),
+    resetPassword: trpc_1.publicProcedure
+        .input(zod_1.z.object({
+        email: zod_1.z.string().email(),
+        code: zod_1.z.string().length(6),
+        newPassword: zod_1.z.string().min(6),
+    }))
+        .mutation(async ({ input, ctx }) => {
+        const email = input.email.toLowerCase().trim();
+        console.log(`[RESET_PWD] Attempting for email="${email}", code="${input.code}"`);
+        const records = await ctx.db
+            .select()
+            .from(schema_1.emailVerification)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.emailVerification.email, email), (0, drizzle_orm_1.eq)(schema_1.emailVerification.code, input.code)))
+            .limit(1);
+        const record = records[0];
+        if (!record || new Date(record.expiresAt) < new Date()) {
+            console.log(`[RESET_PWD] Failed: invalid or expired code for email="${email}"`);
+            throw new server_1.TRPCError({
+                code: "BAD_REQUEST",
+                message: "Invalid or expired verification code.",
+            });
+        }
+        const member = await ctx.db.query.teamMember.findFirst({
+            where: (m, { eq }) => eq(m.email, email),
+        });
+        if (!member) {
+            throw new server_1.TRPCError({ code: "NOT_FOUND", message: "User not found." });
+        }
+        const passwordHash = await bcryptjs_1.default.hash(input.newPassword, 10);
+        await ctx.db
+            .update(schema_1.teamMember)
+            .set({ passwordHash })
+            .where((0, drizzle_orm_1.eq)(schema_1.teamMember.email, email));
+        // Optional: Delete all OTPs for this email after successful reset
+        await ctx.db
+            .delete(schema_1.emailVerification)
+            .where((0, drizzle_orm_1.eq)(schema_1.emailVerification.email, email));
+        console.log(`[RESET_PWD] Success for email="${email}"`);
         return { success: true };
     }),
 });

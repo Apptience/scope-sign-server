@@ -33,7 +33,12 @@ exports.magicLinkRouter = (0, trpc_1.router)({
             .update(schema_1.magicLink)
             .set({ isActive: false, updatedAt: new Date().toISOString() })
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.magicLink.projectId, input.projectId), (0, drizzle_orm_1.eq)(schema_1.magicLink.isActive, true)));
-        const token = crypto_2.default.randomBytes(32).toString("hex");
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let token = "";
+        const bytes = crypto_2.default.randomBytes(8);
+        for (let i = 0; i < 8; i++) {
+            token += chars[bytes[i] % chars.length];
+        }
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + input.expiresInDays);
         const now = new Date().toISOString();

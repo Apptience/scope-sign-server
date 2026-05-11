@@ -8,6 +8,7 @@ const client_1 = require("./client");
 const magicLink_1 = require("./magicLink");
 const project_1 = require("./project");
 const scopeCard_1 = require("./scopeCard");
+const notification_1 = require("./notification");
 exports.appRouter = (0, trpc_1.router)({
     auth: auth_1.authRouter,
     project: project_1.projectRouter,
@@ -15,4 +16,5 @@ exports.appRouter = (0, trpc_1.router)({
     magicLink: magicLink_1.magicLinkRouter,
     client: client_1.clientRouter,
     changeRequest: changeRequest_1.changeRequestRouter,
+    notification: notification_1.notificationRouter,
 });

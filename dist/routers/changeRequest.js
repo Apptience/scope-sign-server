@@ -11,26 +11,30 @@ exports.changeRequestRouter = (0, trpc_1.router)({
     submit: trpc_1.magicLinkProcedure
         .input(zod_1.z.object({
         clientRequest: zod_1.z.string().min(1),
+        scopeCardId: zod_1.z.string().optional(),
     }))
         .mutation(async ({ input, ctx }) => {
-        if (ctx.project.status !== "SIGNED") {
-            throw new server_1.TRPCError({
-                code: "FORBIDDEN",
-                message: "Change requests can only be submitted after the initial scope has been signed off.",
-            });
-        }
         const id = (0, crypto_1.randomUUID)();
         const now = new Date().toISOString();
+        // 1. Create the change request record
         await ctx.db.insert(schema_1.changeRequest).values({
             id,
             projectId: ctx.project.id,
+            scopeCardId: input.scopeCardId || null,
             status: "NEW",
             clientRequest: input.clientRequest,
             createdAt: now,
             updatedAt: now,
         });
+        // 2. Atomically escalate the state of the linked card to CHANGE_REQUESTED
+        if (input.scopeCardId) {
+            await ctx.db.update(schema_1.scopeCard)
+                .set({ status: "CHANGE_REQUESTED", updatedAt: now })
+                .where((0, drizzle_orm_1.eq)(schema_1.scopeCard.id, input.scopeCardId));
+        }
         await ctx.db.insert(schema_1.notification).values({
             id: (0, crypto_1.randomUUID)(),
+            agencyId: ctx.project.agencyId,
             projectId: ctx.project.id,
             content: `New Change Request submitted by ${ctx.project.clientName} for project "${ctx.project.name}"`,
             isRead: false,
@@ -57,8 +61,12 @@ exports.changeRequestRouter = (0, trpc_1.router)({
         agencyResponse: zod_1.z.string().min(1),
         additionalEffort: zod_1.z.string().optional(),
         additionalCost: zod_1.z.number().optional(),
-        timelineImpactDays: zod_1.z.number().default(0),
+        timelineImpactDays: zod_1.z.number().optional().default(0),
         internalNotes: zod_1.z.string().optional(),
+        // Optional Card Redefinitions
+        cardDescription: zod_1.z.string().optional(),
+        cardIncluded: zod_1.z.array(zod_1.z.string()).optional(),
+        cardExcluded: zod_1.z.array(zod_1.z.string()).optional(),
     }))
         .mutation(async ({ input, ctx }) => {
         const cr = await ctx.db.query.changeRequest.findFirst({
@@ -66,12 +74,10 @@ exports.changeRequestRouter = (0, trpc_1.router)({
             with: { project: true },
         });
         if (!cr || cr.project.agencyId !== ctx.user.agencyId) {
-            throw new server_1.TRPCError({
-                code: "NOT_FOUND",
-                message: "Change request not found.",
-            });
+            throw new server_1.TRPCError({ code: "NOT_FOUND", message: "Change request not found." });
         }
         const now = new Date().toISOString();
+        // 1. Update primary change request metrics
         await ctx.db
             .update(schema_1.changeRequest)
             .set({
@@ -84,6 +90,19 @@ exports.changeRequestRouter = (0, trpc_1.router)({
             updatedAt: now,
         })
             .where((0, drizzle_orm_1.eq)(schema_1.changeRequest.id, input.id));
+        // 2. Atomic Redefinition of Correlated ScopeCard contents
+        if (cr.scopeCardId) {
+            const cardUpdate = { updatedAt: now };
+            if (input.cardDescription !== undefined)
+                cardUpdate.description = input.cardDescription;
+            if (input.cardIncluded !== undefined)
+                cardUpdate.included = JSON.stringify(input.cardIncluded);
+            if (input.cardExcluded !== undefined)
+                cardUpdate.excluded = JSON.stringify(input.cardExcluded);
+            if (Object.keys(cardUpdate).length > 1) {
+                await ctx.db.update(schema_1.scopeCard).set(cardUpdate).where((0, drizzle_orm_1.eq)(schema_1.scopeCard.id, cr.scopeCardId));
+            }
+        }
         await ctx.db.insert(schema_1.activityLog).values({
             id: (0, crypto_1.randomUUID)(),
             projectId: cr.projectId,
@@ -127,6 +146,7 @@ exports.changeRequestRouter = (0, trpc_1.router)({
             .where((0, drizzle_orm_1.eq)(schema_1.changeRequest.id, input.id));
         await ctx.db.insert(schema_1.notification).values({
             id: (0, crypto_1.randomUUID)(),
+            agencyId: ctx.project.agencyId,
             projectId: ctx.project.id,
             content: `Change Request for "${ctx.project.name}" was ${input.decision.toLowerCase()} by client.`,
             isRead: false,

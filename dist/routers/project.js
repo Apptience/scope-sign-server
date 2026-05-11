@@ -19,28 +19,36 @@ exports.projectRouter = (0, trpc_1.router)({
         currency: zod_1.z.string().default("USD"),
     }))
         .mutation(async ({ input, ctx }) => {
+        console.log("[PROJECT_ROUTER] Creating project, user:", ctx.user, "input:", input);
         const { agencyId } = ctx.user;
         const id = (0, crypto_1.randomUUID)();
         const now = new Date().toISOString();
-        await ctx.db.insert(schema_1.project).values({
-            id,
-            ...input,
-            agencyId,
-            status: "DRAFT",
-            createdAt: now,
-            updatedAt: now,
-        });
-        await ctx.db.insert(schema_1.activityLog).values({
-            id: (0, crypto_1.randomUUID)(),
-            projectId: id,
-            action: "PROJECT_CREATED",
-            details: JSON.stringify({ projectName: input.name }),
-            createdAt: now,
-        });
-        const created = await ctx.db.query.project.findFirst({
-            where: (p, { eq }) => eq(p.id, id),
-        });
-        return created;
+        try {
+            await ctx.db.insert(schema_1.project).values({
+                id,
+                ...input,
+                agencyId,
+                status: "DRAFT",
+                createdAt: now,
+                updatedAt: now,
+            });
+            await ctx.db.insert(schema_1.activityLog).values({
+                id: (0, crypto_1.randomUUID)(),
+                projectId: id,
+                action: "PROJECT_CREATED",
+                details: JSON.stringify({ projectName: input.name }),
+                createdAt: now,
+            });
+            const created = await ctx.db.query.project.findFirst({
+                where: (p, { eq }) => eq(p.id, id),
+            });
+            console.log("[PROJECT_ROUTER] Successfully created project:", created);
+            return created;
+        }
+        catch (err) {
+            console.error("[PROJECT_ROUTER] Error creating project in database:", err);
+            throw err;
+        }
     }),
     list: trpc_1.protectedProcedure
         .input(zod_1.z.object({
@@ -83,12 +91,20 @@ exports.projectRouter = (0, trpc_1.router)({
                 sections: {
                     orderBy: (s, { asc }) => [asc(s.order)],
                     with: {
-                        scopeCards: { orderBy: (c, { asc }) => [asc(c.order)] },
+                        scopeCards: {
+                            orderBy: (c, { asc }) => [asc(c.order)],
+                            with: {
+                                messages: { orderBy: (m, { asc }) => [asc(m.createdAt)] },
+                            },
+                        },
                     },
                 },
                 scopeCards: {
                     where: (c, { isNull }) => isNull(c.sectionId),
                     orderBy: (c, { asc }) => [asc(c.order)],
+                    with: {
+                        messages: { orderBy: (m, { asc }) => [asc(m.createdAt)] },
+                    },
                 },
                 magicLinks: { orderBy: (m, { desc }) => [desc(m.createdAt)], limit: 1 },
                 activityLogs: { orderBy: (a, { desc }) => [desc(a.createdAt)] },
@@ -109,6 +125,8 @@ exports.projectRouter = (0, trpc_1.router)({
         clientEmail: zod_1.z.string().email().optional(),
         clientCompany: zod_1.z.string().optional(),
         clientWhatsApp: zod_1.z.string().optional(),
+        type: zod_1.z.enum(["SOFTWARE", "CREATIVE", "ARCHITECTURE", "CONSULTING", "OTHER"]).optional(),
+        currency: zod_1.z.string().optional(),
         status: zod_1.z.enum(["DRAFT", "SENT", "IN_REVIEW", "APPROVED", "SIGNED", "ARCHIVED"]).optional(),
     }))
         .mutation(async ({ input, ctx }) => {

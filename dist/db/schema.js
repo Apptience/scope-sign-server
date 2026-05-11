@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.emailVerification = exports.changeRequestRelations = exports.notificationRelations = exports.activityLogRelations = exports.magicLinkRelations = exports.scopeCardRelations = exports.sectionRelations = exports.projectRelations = exports.teamMemberRelations = exports.agencyRelations = exports.changeRequest = exports.notification = exports.activityLog = exports.magicLink = exports.scopeCard = exports.section = exports.project = exports.teamMember = exports.agency = void 0;
+exports.emailVerification = exports.changeRequestRelations = exports.notificationRelations = exports.activityLogRelations = exports.magicLinkRelations = exports.cardMessageRelations = exports.scopeCardRelations = exports.sectionRelations = exports.projectRelations = exports.teamMemberRelations = exports.agencyRelations = exports.changeRequest = exports.notification = exports.activityLog = exports.magicLink = exports.cardMessage = exports.scopeCard = exports.section = exports.project = exports.teamMember = exports.agency = void 0;
 const sqlite_core_1 = require("drizzle-orm/sqlite-core");
 const drizzle_orm_1 = require("drizzle-orm");
 // ─── Agency ──────────────────────────────────────────────────────────────────
@@ -70,6 +70,14 @@ exports.scopeCard = (0, sqlite_core_1.sqliteTable)("ScopeCard", {
     createdAt: (0, sqlite_core_1.text)("createdAt").notNull().default((0, drizzle_orm_1.sql) `(datetime('now'))`),
     updatedAt: (0, sqlite_core_1.text)("updatedAt").notNull().default((0, drizzle_orm_1.sql) `(datetime('now'))`),
 });
+// ─── CardMessage ──────────────────────────────────────────────────────────────
+exports.cardMessage = (0, sqlite_core_1.sqliteTable)("CardMessage", {
+    id: (0, sqlite_core_1.text)("id").primaryKey(),
+    cardId: (0, sqlite_core_1.text)("cardId").notNull().references(() => exports.scopeCard.id, { onDelete: "cascade" }),
+    sender: (0, sqlite_core_1.text)("sender").notNull(), // "CLIENT" | "AGENCY"
+    message: (0, sqlite_core_1.text)("message").notNull(),
+    createdAt: (0, sqlite_core_1.text)("createdAt").notNull().default((0, drizzle_orm_1.sql) `(datetime('now'))`),
+});
 // ─── MagicLink ────────────────────────────────────────────────────────────────
 exports.magicLink = (0, sqlite_core_1.sqliteTable)("MagicLink", {
     id: (0, sqlite_core_1.text)("id").primaryKey(),
@@ -91,6 +99,7 @@ exports.activityLog = (0, sqlite_core_1.sqliteTable)("ActivityLog", {
 // ─── Notification ─────────────────────────────────────────────────────────────
 exports.notification = (0, sqlite_core_1.sqliteTable)("Notification", {
     id: (0, sqlite_core_1.text)("id").primaryKey(),
+    agencyId: (0, sqlite_core_1.text)("agencyId").notNull().references(() => exports.agency.id, { onDelete: "cascade" }),
     projectId: (0, sqlite_core_1.text)("projectId").notNull().references(() => exports.project.id, { onDelete: "cascade" }),
     content: (0, sqlite_core_1.text)("content").notNull(),
     isRead: (0, sqlite_core_1.integer)("isRead", { mode: "boolean" }).notNull().default(false),
@@ -100,6 +109,7 @@ exports.notification = (0, sqlite_core_1.sqliteTable)("Notification", {
 exports.changeRequest = (0, sqlite_core_1.sqliteTable)("ChangeRequest", {
     id: (0, sqlite_core_1.text)("id").primaryKey(),
     projectId: (0, sqlite_core_1.text)("projectId").notNull().references(() => exports.project.id, { onDelete: "cascade" }),
+    scopeCardId: (0, sqlite_core_1.text)("scopeCardId").references(() => exports.scopeCard.id, { onDelete: "set null" }),
     status: (0, sqlite_core_1.text)("status").notNull().default("NEW"),
     clientRequest: (0, sqlite_core_1.text)("clientRequest").notNull(),
     agencyResponse: (0, sqlite_core_1.text)("agencyResponse"),
@@ -114,6 +124,8 @@ exports.changeRequest = (0, sqlite_core_1.sqliteTable)("ChangeRequest", {
 // ─── Relations ────────────────────────────────────────────────────────────────
 exports.agencyRelations = (0, drizzle_orm_1.relations)(exports.agency, ({ many }) => ({
     members: many(exports.teamMember),
+    projects: many(exports.project),
+    notifications: many(exports.notification),
 }));
 exports.teamMemberRelations = (0, drizzle_orm_1.relations)(exports.teamMember, ({ one }) => ({
     agency: one(exports.agency, {
@@ -121,7 +133,11 @@ exports.teamMemberRelations = (0, drizzle_orm_1.relations)(exports.teamMember, (
         references: [exports.agency.id],
     }),
 }));
-exports.projectRelations = (0, drizzle_orm_1.relations)(exports.project, ({ many }) => ({
+exports.projectRelations = (0, drizzle_orm_1.relations)(exports.project, ({ one, many }) => ({
+    agency: one(exports.agency, {
+        fields: [exports.project.agencyId],
+        references: [exports.agency.id],
+    }),
     sections: many(exports.section),
     scopeCards: many(exports.scopeCard),
     magicLinks: many(exports.magicLink),
@@ -136,7 +152,7 @@ exports.sectionRelations = (0, drizzle_orm_1.relations)(exports.section, ({ one,
     }),
     scopeCards: many(exports.scopeCard),
 }));
-exports.scopeCardRelations = (0, drizzle_orm_1.relations)(exports.scopeCard, ({ one }) => ({
+exports.scopeCardRelations = (0, drizzle_orm_1.relations)(exports.scopeCard, ({ one, many }) => ({
     project: one(exports.project, {
         fields: [exports.scopeCard.projectId],
         references: [exports.project.id],
@@ -144,6 +160,14 @@ exports.scopeCardRelations = (0, drizzle_orm_1.relations)(exports.scopeCard, ({ 
     section: one(exports.section, {
         fields: [exports.scopeCard.sectionId],
         references: [exports.section.id],
+    }),
+    messages: many(exports.cardMessage),
+    changeRequests: many(exports.changeRequest),
+}));
+exports.cardMessageRelations = (0, drizzle_orm_1.relations)(exports.cardMessage, ({ one }) => ({
+    card: one(exports.scopeCard, {
+        fields: [exports.cardMessage.cardId],
+        references: [exports.scopeCard.id],
     }),
 }));
 exports.magicLinkRelations = (0, drizzle_orm_1.relations)(exports.magicLink, ({ one }) => ({
@@ -159,6 +183,10 @@ exports.activityLogRelations = (0, drizzle_orm_1.relations)(exports.activityLog,
     }),
 }));
 exports.notificationRelations = (0, drizzle_orm_1.relations)(exports.notification, ({ one }) => ({
+    agency: one(exports.agency, {
+        fields: [exports.notification.agencyId],
+        references: [exports.agency.id],
+    }),
     project: one(exports.project, {
         fields: [exports.notification.projectId],
         references: [exports.project.id],
@@ -168,6 +196,10 @@ exports.changeRequestRelations = (0, drizzle_orm_1.relations)(exports.changeRequ
     project: one(exports.project, {
         fields: [exports.changeRequest.projectId],
         references: [exports.project.id],
+    }),
+    scopeCard: one(exports.scopeCard, {
+        fields: [exports.changeRequest.scopeCardId],
+        references: [exports.scopeCard.id],
     }),
 }));
 // ─── EmailVerification ────────────────────────────────────────────────────────
